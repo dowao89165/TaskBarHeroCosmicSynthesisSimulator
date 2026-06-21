@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TBHコズミック合成シミュレーター</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #10131a;
+      --panel: #171d27;
+      --panel-2: #111722;
+      --line: #2d3748;
+      --text: #e8eef7;
+      --muted: #9aa7ba;
+      --blue: #4f8cff;
+      --red: #ef5a73;
+      --green: #54d88d;
+      --yellow: #f4c95d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+      background:
+        radial-gradient(circle at 15% 0%, rgba(79, 140, 255, 0.16), transparent 30%),
+        radial-gradient(circle at 85% 0%, rgba(239, 90, 115, 0.13), transparent 32%),
+        var(--bg);
+      color: var(--text);
+    }
+
+    main {
+      width: min(1120px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 28px 0 44px;
+    }
+
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(24px, 3vw, 34px);
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+      max-width: 760px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    button {
+      min-height: 44px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      padding: 0 18px;
+      background: var(--blue);
+      color: white;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover { filter: brightness(1.08); }
+    button:active { transform: translateY(1px); }
+    button.secondary { background: #2a3446; }
+
+    button:disabled,
+    button:disabled:hover {
+      opacity: 0.55;
+      cursor: not-allowed;
+      filter: none;
+      transform: none;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .grid > .panel:first-child {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .left-col,
+    .right-col {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+      min-width: 0;
+    }
+
+    .left-col h2,
+    .right-col h2 {
+      margin-bottom: 0;
+    }
+
+    .grid > .panel:nth-child(2) {
+      grid-column: 1 / -1;
+    }
+
+    section {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(23, 29, 39, 0.9);
+      overflow: hidden;
+    }
+
+    .panel { padding: 18px; }
+
+    .hero {
+      display: grid;
+      gap: 10px;
+      padding: 20px;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .value {
+      color: var(--red);
+      font-size: clamp(32px, 6vw, 56px);
+      line-height: 1;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .next {
+      display: grid;
+      gap: 8px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #141b25;
+    }
+
+    .next strong {
+      font-size: 20px;
+      line-height: 1.35;
+    }
+
+    .message {
+      min-height: 28px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .message.fail { color: var(--red); font-weight: 800; }
+    .message.success { color: var(--green); font-weight: 800; }
+    .message.warn { color: var(--yellow); font-weight: 800; }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      background: #141b25;
+    }
+
+    th:first-child, td:first-child { text-align: left; }
+    tr:last-child td { border-bottom: 0; }
+
+    .inventory td:nth-child(2) {
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .counts-panel {
+      margin-top: 16px;
+    }
+
+    .card {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #141b25;
+      padding: 13px;
+    }
+
+    .card strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 20px;
+      overflow-wrap: anywhere;
+    }
+
+    .log {
+      display: grid;
+      gap: 8px;
+      max-height: 330px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .log-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #141b25;
+      padding: 10px;
+      line-height: 1.55;
+    }
+
+    .log-item b { color: var(--yellow); }
+    .log-item.fail b { color: var(--red); }
+    .log-item.success b { color: var(--green); }
+    .log-item.warn b { color: var(--yellow); }
+
+    .rules { margin-top: 16px; }
+
+    .r-common { color: #c9ced7; }
+    .r-uncommon { color: #58d783; }
+    .r-rare { color: #68a9ff; }
+    .r-legendary { color: #bd8bff; }
+    .r-immortal { color: #f5c451; }
+    .r-arcana { color: #ff7084; }
+    .r-beyond { color: #f28bc4; }
+    .r-celestial { color: #51d2d0; }
+    .r-divine { color: #f4f7ff; }
+    .r-cosmic { color: #ff9f43; }
+
+    .prob-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .current-prob-wrap {
+      display: grid;
+      gap: 8px;
+    }
+
+    .prob-row {
+      display: grid;
+      gap: 8px;
+      padding: 11px 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #141b25;
+    }
+
+    .prob-row-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .prob-row-head .name {
+      font-weight: 800;
+      font-size: 14px;
+    }
+
+    .prob-row-head .sub {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .prob-bar {
+      display: flex;
+      height: 10px;
+      border-radius: 5px;
+      overflow: hidden;
+      background: #0c111a;
+    }
+
+    .prob-seg + .prob-seg { border-left: 1px solid rgba(8, 10, 16, 0.55); }
+
+    .prob-seg.fail {
+      opacity: 0.4;
+      background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.3) 0 3px, transparent 3px 6px);
+    }
+
+    .prob-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 14px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .prob-legend .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+
+    .prob-legend .dot.fail {
+      opacity: 0.55;
+      background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.35) 0 2px, transparent 2px 4px);
+    }
+
+    .prob-legend .pct {
+      color: var(--text);
+      font-weight: 700;
+      margin-left: 2px;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(8, 10, 16, 0.72);
+      backdrop-filter: blur(2px);
+      animation: overlay-fade 0.18s ease-out;
+    }
+
+    .modal-overlay[hidden] { display: none; }
+
+    .modal-box {
+      width: min(420px, 100%);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+      padding: 26px 22px 22px;
+      text-align: center;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+      animation: modal-pop 0.22s cubic-bezier(.2, .8, .3, 1.2);
+    }
+
+    .modal-box.cosmic {
+      border-color: var(--r-cosmic, #ff9f43);
+      box-shadow: 0 0 0 1px rgba(255, 159, 67, 0.5), 0 18px 50px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-icon {
+      font-size: 34px;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .modal-box h3 {
+      margin: 0 0 10px;
+      font-size: 21px;
+      color: var(--yellow);
+    }
+
+    .modal-box.cosmic h3 { color: var(--r-cosmic, #ff9f43); }
+
+    .modal-box p {
+      margin: 0 0 20px;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 14px;
+    }
+
+    .modal-box button {
+      width: 100%;
+      background: var(--green);
+    }
+
+    .modal-box button:disabled {
+      background: #2a3446;
+      color: var(--muted);
+      cursor: not-allowed;
+    }
+
+    .modal-hint {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    @keyframes overlay-fade {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes modal-pop {
+      from { opacity: 0; transform: scale(0.9) translateY(8px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    @media (max-width: 840px) {
+      header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .actions { justify-content: stretch; }
+      button { flex: 1 1 180px; }
+      .grid,
+      .grid > .panel:first-child {
+        grid-template-columns: 1fr;
+      }
+
+      .cards { grid-template-columns: 1fr; }
+      th, td { white-space: normal; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>TBHコズミック合成シミュレーター</h1>
+        <p class="lead">賽の河原へようこそ。『合成開始！』ボタンを押すと目標達成まで処理が進行します。</p>
+      </div>
+      <div class="actions">
+        <button id="stepBtn" type="button">合成開始！</button>
+        <button id="resetBtn" type="button" class="secondary">リセット</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="panel">
+        <div class="left-col">
+          <div class="hero">
+            <span class="label">消費したコモン総数</span>
+            <span id="totalCommons" class="value">0 個</span>
+            <span id="totalCommonsSub" class="label">コモン合成 0 回分</span>
+          </div>
+
+          <div class="next">
+            <span class="label">次の目標</span>
+            <strong id="nextAction">アンコモンを9個揃える</strong>
+            <div id="message" class="message">ボタンを押すと、目標在庫まで合成します。</div>
+          </div>
+
+          <div class="current-prob-wrap">
+            <span class="label">現在合成中の確率</span>
+            <div id="currentProb"></div>
+          </div>
+        </div>
+
+        <div class="right-col">
+          <div>
+            <h2>現在の在庫数</h2>
+            <div id="inventory"></div>
+          </div>
+
+          <div class="cards">
+            <div class="card">
+              <span class="label">合成総回数</span>
+              <strong id="totalSynths">0 回</strong>
+            </div>
+            <div class="card">
+              <span class="label">失敗回数</span>
+              <strong id="failCount">0 回</strong>
+            </div>
+            <div class="card">
+              <span class="label">現在の段階</span>
+              <strong id="stageName">アンコモン</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>各レアリティの合成回数</h2>
+        <div id="counts"></div>
+      </section>
+    </div>
+
+    <section class="panel rules">
+      <h2>ログ</h2>
+      <div id="log" class="log"></div>
+    </section>
+
+    <section class="panel rules">
+      <h2>合成確率</h2>
+      <div id="rules"></div>
+    </section>
+  </main>
+
+  <div id="modalOverlay" class="modal-overlay" hidden>
+    <div id="modalBox" class="modal-box" role="alertdialog" aria-modal="true" aria-labelledby="modalTitle" aria-describedby="modalBody">
+      <div class="modal-icon" id="modalIcon">✨</div>
+      <h3 id="modalTitle"></h3>
+      <p id="modalBody"></p>
+      <button id="modalCloseBtn" type="button" disabled>確認して次へ進む</button>
+      <div class="modal-hint" id="modalHint">結果を見逃さないように、少しだけお待ちください…</div>
+    </div>
+  </div>
+
+  <script>
+    const rarities = [
+      { key: "common", name: "コモン", cls: "r-common", color: "#c9ced7" },
+      { key: "uncommon", name: "アンコモン", cls: "r-uncommon", color: "#58d783" },
+      { key: "rare", name: "レア", cls: "r-rare", color: "#68a9ff" },
+      { key: "legendary", name: "レジェンダリー", cls: "r-legendary", color: "#bd8bff" },
+      { key: "immortal", name: "イモータル", cls: "r-immortal", color: "#f5c451" },
+      { key: "arcana", name: "アルカナ", cls: "r-arcana", color: "#ff7084" },
+      { key: "beyond", name: "ビヨンド", cls: "r-beyond", color: "#f28bc4" },
+      { key: "celestial", name: "セレスティアル", cls: "r-celestial", color: "#51d2d0" },
+      { key: "divine", name: "ディヴァイン", cls: "r-divine", color: "#f4f7ff" },
+      { key: "cosmic", name: "コズミック", cls: "r-cosmic", color: "#ff9f43" }
+    ];
+
+    const rules = [
+      { from: "common", outcomes: [{ to: "uncommon", p: 0.952 }, { to: "rare", p: 0.048 }] },
+      { from: "uncommon", outcomes: [{ to: "rare", p: 0.962 }, { to: "legendary", p: 0.038 }] },
+      { from: "rare", outcomes: [{ to: "legendary", p: 0.98 }, { to: "immortal", p: 0.02 }] },
+      { from: "legendary", outcomes: [{ to: "immortal", p: 0.99 }, { to: "arcana", p: 0.001 }] },
+      { from: "immortal", outcomes: [{ to: "immortal", p: 0.499, fail: true }, { to: "arcana", p: 0.499 }, { to: "beyond", p: 0.002 }] },
+      { from: "arcana", outcomes: [{ to: "arcana", p: 0.669, fail: true }, { to: "beyond", p: 0.329 }, { to: "celestial", p: 0.002 }] },
+      { from: "beyond", outcomes: [{ to: "beyond", p: 0.7696, fail: true }, { to: "celestial", p: 0.2296 }, { to: "divine", p: 0.0008 }] },
+      { from: "celestial", outcomes: [{ to: "celestial", p: 0.8299, fail: true }, { to: "divine", p: 0.1699 }, { to: "cosmic", p: 0.0002 }] },
+      { from: "divine", outcomes: [{ to: "divine", p: 0.909, fail: true }, { to: "cosmic", p: 0.091 }] }
+    ];
+
+    const targets = ["uncommon", "rare", "legendary", "immortal", "arcana", "beyond", "celestial", "divine"];
+    const rarityIndex = new Map(rarities.map((rarity, index) => [rarity.key, index]));
+    const rarityByKey = new Map(rarities.map(rarity => [rarity.key, rarity]));
+    const ruleByFrom = new Map(rules.map(rule => [rule.from, rule]));
+
+    const state = {
+      inventory: {},
+      synthCount: {},
+      totalCommons: 0,
+      failCount: 0,
+      targetIndex: 0,
+      logs: []
+    };
+
+    for (const rarity of rarities) state.inventory[rarity.key] = 0;
+    for (const rule of rules) state.synthCount[rule.from] = 0;
+
+    const stepBtn = document.getElementById("stepBtn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalBox = document.getElementById("modalBox");
+    const modalIcon = document.getElementById("modalIcon");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    const modalCloseBtn = document.getElementById("modalCloseBtn");
+    const modalHint = document.getElementById("modalHint");
+
+    const MODAL_CLOSE_DELAY_MS = 700; // 連打での誤クリックを防ぐための猶予時間
+    let modalTimer = null;
+
+    function openMilestoneModal(title, body, options = {}) {
+      const { icon = "✨", cosmic = false } = options;
+
+      modalTitle.textContent = title;
+      modalBody.textContent = body;
+      modalIcon.textContent = icon;
+      modalBox.classList.toggle("cosmic", cosmic);
+
+      modalOverlay.hidden = false;
+      stepBtn.disabled = true;
+      resetBtn.disabled = true;
+      modalCloseBtn.disabled = true;
+      modalHint.style.visibility = "visible";
+
+      clearTimeout(modalTimer);
+      modalTimer = setTimeout(() => {
+        modalCloseBtn.disabled = false;
+        modalHint.style.visibility = "hidden";
+      }, MODAL_CLOSE_DELAY_MS);
+    }
+
+    function closeMilestoneModal() {
+      clearTimeout(modalTimer);
+      modalOverlay.hidden = true;
+      stepBtn.disabled = false;
+      resetBtn.disabled = false;
+    }
+
+    modalCloseBtn.addEventListener("click", closeMilestoneModal);
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && !modalOverlay.hidden && !modalCloseBtn.disabled) {
+        closeMilestoneModal();
+      }
+    });
+
+    function format(value) {
+      return Math.trunc(value).toLocaleString("ja-JP");
+    }
+
+    function rarityName(key) {
+      return rarityByKey.get(key).name;
+    }
+
+    function rarityClass(key) {
+      return rarityByKey.get(key).cls;
+    }
+
+    function previousRarity(key) {
+      return rarities[rarityIndex.get(key) - 1].key;
+    }
+
+    function rand() {
+      if (window.crypto && crypto.getRandomValues) {
+        const buffer = new Uint32Array(1);
+        crypto.getRandomValues(buffer);
+        return (buffer[0] + 0.5) / 4294967296;
+      }
+      return Math.random();
+    }
+
+    function chooseOutcome(rule) {
+      const roll = rand();
+      let total = 0;
+
+      for (const outcome of rule.outcomes) {
+        total += outcome.p;
+        if (roll < total) return outcome;
+      }
+
+      return rule.outcomes[rule.outcomes.length - 1];
+    }
+
+    function addCommonsForOneCombine() {
+      state.inventory.common += 9;
+      state.totalCommons += 9;
+    }
+
+    function synthesize(fromKey) {
+      const rule = ruleByFrom.get(fromKey);
+      if (!rule || state.inventory[fromKey] < 9) return null;
+
+      const outcome = chooseOutcome(rule);
+      state.inventory[fromKey] -= 9;
+      state.inventory[outcome.to] += 1;
+      state.synthCount[fromKey] += 1;
+      if (outcome.fail) state.failCount += 1;
+
+      return {
+        from: fromKey,
+        to: outcome.to,
+        failed: Boolean(outcome.fail)
+      };
+    }
+
+    function reachedStopTarget(guard) {
+      return guard.stopKey && state.inventory[guard.stopKey] >= guard.stopAt;
+    }
+
+    function ensureNine(key, guard) {
+      while (state.inventory[key] < 9) {
+        if (reachedStopTarget(guard)) return true;
+
+        if (key === "common") {
+          addCommonsForOneCombine();
+          guard.count += 1;
+        } else {
+          produceOne(key, guard);
+        }
+
+        if (reachedStopTarget(guard)) return true;
+        if (guard.count >= guard.limit) return false;
+      }
+
+      return true;
+    }
+
+    function produceOne(targetKey, guard) {
+      if (reachedStopTarget(guard)) return { stopped: true };
+
+      const fromKey = previousRarity(targetKey);
+      if (!ensureNine(fromKey, guard)) return null;
+      if (reachedStopTarget(guard)) return { stopped: true };
+
+      guard.count += 1;
+      return synthesize(fromKey);
+    }
+
+    function advanceStep() {
+      if (state.inventory.cosmic >= 1) {
+        addLog("success", "完成済み", "コズミックが完成しました！リセットすると最初から遊べます。");
+        render();
+        return;
+      }
+
+      const target = targets[state.targetIndex];
+
+      if (state.inventory[target] < 9) {
+        gatherTarget(target);
+      } else {
+        combineTarget(target);
+      }
+
+      render();
+    }
+
+    function gatherTarget(target) {
+      const before = state.inventory[target];
+      const commonsBefore = state.totalCommons;
+      const synthsBefore = totalSynths();
+      const guard = { count: 0, limit: 250000, stopKey: target, stopAt: 9 };
+
+      while (state.inventory[target] < 9) {
+        const result = produceOne(target, guard);
+        if (state.inventory.cosmic >= 1) break;
+
+        if (!result || guard.count >= guard.limit) {
+          addLog(
+            "warn",
+            "途中で一時停止",
+            `${rarityName(target)}を9個揃える途中です。今回のクリックでは内部処理 ${format(guard.count)} 回まで進めました。もう一度押すと続きます。`
+          );
+          return;
+        }
+      }
+
+      if (state.inventory.cosmic >= 1) {
+        const title = "コズミック完成！";
+        const body = `セレスティアル9個からコズミックが完成しました。消費コモンは ${format(state.totalCommons)} 個です。`;
+        addLog("success", title, body);
+        openMilestoneModal(title, body, { icon: "🌌", cosmic: true });
+        return;
+      }
+
+      const milestoneTitle = `${rarityName(target)}が9個揃った！`;
+      const milestoneBody = `${rarityName(target)} ${format(before)}個 → ${format(state.inventory[target])}個。消費コモン +${format(state.totalCommons - commonsBefore)} 個、合成 +${format(totalSynths() - synthsBefore)} 回。`;
+      addLog("success", milestoneTitle, milestoneBody);
+      openMilestoneModal(milestoneTitle, milestoneBody);
+    }
+
+    function combineTarget(target) {
+      const result = synthesize(target);
+      if (!result) return;
+
+      if (result.failed) {
+        addLog(
+          "fail",
+          "合成失敗！",
+          `${rarityName(result.from)}9個 → ${rarityName(result.to)}1個。もう一回同じ目標をやり直し。`
+        );
+        return;
+      }
+
+      if (result.to === "cosmic" || state.inventory.cosmic >= 1) {
+        const title = "コズミック完成！";
+        const body = `${rarityName(result.from)}9個 → コズミック1個。消費コモンは ${format(state.totalCommons)} 個です。`;
+        addLog("success", title, body);
+        openMilestoneModal(title, body, { icon: "🌌", cosmic: true });
+        return;
+      }
+
+      addLog(
+        "success",
+        "合成成功！",
+        `${rarityName(result.from)}9個 → ${rarityName(result.to)}1個。次の段階へ進みます。`
+      );
+      state.targetIndex = Math.min(state.targetIndex + 1, targets.length - 1);
+    }
+
+    function nextActionText() {
+      if (state.inventory.cosmic >= 1) return "コズミック完成。リセットで最初から";
+
+      const target = targets[state.targetIndex];
+      if (state.inventory[target] < 9) {
+        return `${rarityName(target)}を9個揃える！`;
+      }
+
+      return `${rarityName(target)}9個を合成する！`;
+    }
+
+    function addLog(type, title, body) {
+      state.logs.unshift({ type, title, body });
+      state.logs = state.logs.slice(0, 70);
+    }
+
+    function render() {
+      document.getElementById("totalCommons").textContent = `${format(state.totalCommons)} 個`;
+      document.getElementById("totalCommonsSub").textContent = `コモン合成 ${format(state.synthCount.common)} 回 / 約 ${compactJapanese(state.totalCommons)} 個`;
+      document.getElementById("nextAction").textContent = nextActionText();
+      document.getElementById("totalSynths").textContent = `${format(totalSynths())} 回`;
+      document.getElementById("failCount").textContent = `${format(state.failCount)} 回`;
+      document.getElementById("stageName").textContent = state.inventory.cosmic >= 1 ? "完成" : rarityName(targets[state.targetIndex]);
+
+      const lastLog = state.logs[0];
+      const message = document.getElementById("message");
+      message.className = `message ${lastLog ? lastLog.type : ""}`;
+      message.textContent = lastLog ? `${lastLog.title}: ${lastLog.body}` : "ボタンを押すと、目標在庫まで合成します。";
+
+      renderInventory();
+      renderCounts();
+      renderLog();
+      renderCurrentProb();
+    }
+
+    function renderInventory() {
+      const rows = rarities.map(rarity => `
+        <tr>
+          <td class="${rarity.cls}">${rarity.name}</td>
+          <td>${format(state.inventory[rarity.key])} 個</td>
+        </tr>
+      `).join("");
+
+      document.getElementById("inventory").innerHTML = `
+        <table class="inventory">
+          <thead><tr><th>レアリティ</th><th>在庫</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    function renderCounts() {
+      const rows = rules.map(rule => `
+        <tr>
+          <td class="${rarityClass(rule.from)}">${rarityName(rule.from)}</td>
+          <td>${format(state.synthCount[rule.from])} 回</td>
+        </tr>
+      `).join("");
+
+      document.getElementById("counts").innerHTML = `
+        <table>
+          <thead><tr><th>素材</th><th>合成回数</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    function renderLog() {
+      const items = state.logs.length
+        ? state.logs.map(log => `<div class="log-item ${log.type}"><b>${log.title}</b><br>${log.body}</div>`).join("")
+        : `<div class="log-item"><b>ログ</b><br>まだ合成していません。</div>`;
+
+      document.getElementById("log").innerHTML = items;
+    }
+
+    function renderProbRow(rule) {
+      const segments = rule.outcomes.map(outcome => {
+        const pct = (outcome.p * 100).toFixed(3).replace(/\.?0+$/, "");
+        const failClass = outcome.fail ? " fail" : "";
+        return `<span class="prob-seg${failClass}" style="width:${outcome.p * 100}%; background:${rarityByKey.get(outcome.to).color};" title="${rarityName(outcome.to)} ${pct}%"></span>`;
+      }).join("");
+
+      const legend = rule.outcomes.map(outcome => {
+        const pct = (outcome.p * 100).toFixed(3).replace(/\.?0+$/, "");
+        const dotClass = outcome.fail ? " fail" : "";
+        return `
+          <span>
+            <span class="dot${dotClass}" style="background:${rarityByKey.get(outcome.to).color};"></span>
+            <span class="${rarityClass(outcome.to)}">${rarityName(outcome.to)}</span>
+            <span class="pct">${pct}%</span>
+          </span>
+        `;
+      }).join("");
+
+      return `
+        <div class="prob-row">
+          <div class="prob-row-head">
+            <span class="name ${rarityClass(rule.from)}">${rarityName(rule.from)}9個を合成</span>
+            <span class="sub">↓</span>
+          </div>
+          <div class="prob-bar">${segments}</div>
+          <div class="prob-legend">${legend}</div>
+        </div>
+      `;
+    }
+
+    function renderRules() {
+      const rows = rules.map(renderProbRow).join("");
+      document.getElementById("rules").innerHTML = `<div class="prob-list">${rows}</div>`;
+    }
+
+    function currentSynthesisKey() {
+      const target = targets[state.targetIndex];
+      return state.inventory[target] < 9 ? previousRarity(target) : target;
+    }
+
+    function renderCurrentProb() {
+      const rule = ruleByFrom.get(currentSynthesisKey());
+      document.getElementById("currentProb").innerHTML = rule ? renderProbRow(rule) : "";
+    }
+
+    function compactJapanese(value) {
+      const num = Math.trunc(value);
+      const oku = Math.floor(num / 100000000);
+      const man = Math.floor((num % 100000000) / 10000);
+      const rest = num % 10000;
+      const parts = [];
+      if (oku) parts.push(`${oku}億`);
+      if (man) parts.push(`${man}万`);
+      if (rest || parts.length === 0) parts.push(`${rest}`);
+      return parts.join("");
+    }
+
+    function totalSynths() {
+      return Object.values(state.synthCount).reduce((sum, count) => sum + count, 0);
+    }
+
+    function reset() {
+      for (const rarity of rarities) state.inventory[rarity.key] = 0;
+      for (const rule of rules) state.synthCount[rule.from] = 0;
+      state.totalCommons = 0;
+      state.failCount = 0;
+      state.targetIndex = 0;
+      state.logs = [];
+      render();
+    }
+
+    stepBtn.addEventListener("click", advanceStep);
+    resetBtn.addEventListener("click", reset);
+    renderRules();
+    render();
+  </script>
+</body>
+</html>
