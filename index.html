@@ -82,6 +82,8 @@
     button:hover { filter: brightness(1.08); }
     button:active { transform: translateY(1px); }
     button.secondary { background: #2a3446; }
+    button.danger { background: #7a2030; border-color: var(--red); }
+    button.danger:hover { background: #9c2a3e; }
 
     button:disabled,
     button:disabled:hover {
@@ -177,6 +179,49 @@
     .message.fail { color: var(--red); font-weight: 800; }
     .message.success { color: var(--green); font-weight: 800; }
     .message.warn { color: var(--yellow); font-weight: 800; }
+
+    /* 進捗バー */
+    .progress-wrap {
+      display: none;
+      gap: 8px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #141b25;
+    }
+    .progress-wrap.active { display: grid; }
+
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .progress-label span:last-child {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .progress-bar-outer {
+      height: 8px;
+      border-radius: 4px;
+      background: #0c111a;
+      overflow: hidden;
+    }
+
+    .progress-bar-inner {
+      height: 100%;
+      border-radius: 4px;
+      background: var(--blue);
+      transition: width 0.12s ease;
+      width: 0%;
+    }
+
+    .progress-synths {
+      font-size: 12px;
+      color: var(--muted);
+    }
 
     h2 {
       margin: 0 0 12px;
@@ -455,6 +500,7 @@
       </div>
       <div class="actions">
         <button id="stepBtn" type="button">合成開始！</button>
+        <button id="cancelBtn" type="button" class="danger" style="display:none;">キャンセル</button>
         <button id="resetBtn" type="button" class="secondary">リセット</button>
       </div>
     </header>
@@ -472,6 +518,18 @@
             <span class="label">次の目標</span>
             <strong id="nextAction">アンコモンを9個揃える</strong>
             <div id="message" class="message">ボタンを押すと、目標在庫まで合成します。</div>
+          </div>
+
+          <!-- 進捗バー（バッチ処理中のみ表示） -->
+          <div id="progressWrap" class="progress-wrap">
+            <div class="progress-label">
+              <span id="progressTarget">処理中…</span>
+              <span id="progressPct">0%</span>
+            </div>
+            <div class="progress-bar-outer">
+              <div id="progressBar" class="progress-bar-inner"></div>
+            </div>
+            <div id="progressSynths" class="progress-synths">合成 0 回 / コモン消費 0 個</div>
           </div>
 
           <div class="current-prob-wrap">
@@ -532,189 +590,283 @@
 
   <script>
     const rarities = [
-      { key: "common", name: "コモン", cls: "r-common", color: "#c9ced7" },
-      { key: "uncommon", name: "アンコモン", cls: "r-uncommon", color: "#58d783" },
-      { key: "rare", name: "レア", cls: "r-rare", color: "#68a9ff" },
-      { key: "legendary", name: "レジェンダリー", cls: "r-legendary", color: "#f5c451" },
-      { key: "immortal", name: "イモータル", cls: "r-immortal", color: "#ff7084" },
-      { key: "arcana", name: "アルカナ", cls: "r-arcana", color: "#bd8bff" },
-      { key: "beyond", name: "ビヨンド", cls: "r-beyond", color: "#f28bc4" },
-      { key: "celestial", name: "セレスティアル", cls: "r-celestial", color: "#51d2d0" },
-      { key: "divine", name: "ディヴァイン", cls: "r-divine", color: "#f4f7ff" },
-      { key: "cosmic", name: "コズミック", cls: "r-cosmic", color: "#ff9f43" }
+      { key: "common",    name: "コモン",         cls: "r-common",    color: "#c9ced7" },
+      { key: "uncommon",  name: "アンコモン",      cls: "r-uncommon",  color: "#58d783" },
+      { key: "rare",      name: "レア",            cls: "r-rare",      color: "#68a9ff" },
+      { key: "legendary", name: "レジェンダリー",  cls: "r-legendary", color: "#f5c451" },
+      { key: "immortal",  name: "イモータル",      cls: "r-immortal",  color: "#ff7084" },
+      { key: "arcana",    name: "アルカナ",        cls: "r-arcana",    color: "#bd8bff" },
+      { key: "beyond",    name: "ビヨンド",        cls: "r-beyond",    color: "#f28bc4" },
+      { key: "celestial", name: "セレスティアル",  cls: "r-celestial", color: "#51d2d0" },
+      { key: "divine",    name: "ディヴァイン",    cls: "r-divine",    color: "#f4f7ff" },
+      { key: "cosmic",    name: "コズミック",      cls: "r-cosmic",    color: "#ff9f43" }
     ];
 
     const rules = [
-      { from: "common", outcomes: [{ to: "uncommon", p: 0.952 }, { to: "rare", p: 0.048 }] },
-      { from: "uncommon", outcomes: [{ to: "rare", p: 0.962 }, { to: "legendary", p: 0.038 }] },
-      { from: "rare", outcomes: [{ to: "legendary", p: 0.98 }, { to: "immortal", p: 0.02 }] },
-      { from: "legendary", outcomes: [{ to: "immortal", p: 0.99 }, { to: "arcana", p: 0.001 }] },
-      { from: "immortal", outcomes: [{ to: "immortal", p: 0.499, fail: true }, { to: "arcana", p: 0.499 }, { to: "beyond", p: 0.002 }] },
-      { from: "arcana", outcomes: [{ to: "arcana", p: 0.669, fail: true }, { to: "beyond", p: 0.329 }, { to: "celestial", p: 0.002 }] },
-      { from: "beyond", outcomes: [{ to: "beyond", p: 0.7696, fail: true }, { to: "celestial", p: 0.2296 }, { to: "divine", p: 0.0008 }] },
-      { from: "celestial", outcomes: [{ to: "celestial", p: 0.8299, fail: true }, { to: "divine", p: 0.1699 }, { to: "cosmic", p: 0.0002 }] },
-      { from: "divine", outcomes: [{ to: "divine", p: 0.909, fail: true }, { to: "cosmic", p: 0.091 }] }
+      { from: "common",    outcomes: [{ to: "uncommon",  p: 0.952 }, { to: "rare",      p: 0.048 }] },
+      { from: "uncommon",  outcomes: [{ to: "rare",      p: 0.962 }, { to: "legendary", p: 0.038 }] },
+      { from: "rare",      outcomes: [{ to: "legendary", p: 0.98  }, { to: "immortal",  p: 0.02  }] },
+      { from: "legendary", outcomes: [{ to: "immortal",  p: 0.99  }, { to: "arcana",    p: 0.001 }] },
+      { from: "immortal",  outcomes: [{ to: "immortal",  p: 0.499, fail: true }, { to: "arcana",    p: 0.499 }, { to: "beyond",    p: 0.002 }] },
+      { from: "arcana",    outcomes: [{ to: "arcana",    p: 0.669, fail: true }, { to: "beyond",    p: 0.329 }, { to: "celestial", p: 0.002 }] },
+      { from: "beyond",    outcomes: [{ to: "beyond",    p: 0.7696, fail: true }, { to: "celestial", p: 0.2296 }, { to: "divine",    p: 0.0008 }] },
+      { from: "celestial", outcomes: [{ to: "celestial", p: 0.8299, fail: true }, { to: "divine",    p: 0.1699 }, { to: "cosmic",    p: 0.0002 }] },
+      { from: "divine",    outcomes: [{ to: "divine",    p: 0.909,  fail: true }, { to: "cosmic",    p: 0.091  }] }
     ];
 
+    // ゴールに向けて必要な target の列
     const targets = ["uncommon", "rare", "legendary", "immortal", "arcana", "beyond", "celestial", "divine"];
-    const rarityIndex = new Map(rarities.map((rarity, index) => [rarity.key, index]));
-    const rarityByKey = new Map(rarities.map(rarity => [rarity.key, rarity]));
-    const ruleByFrom = new Map(rules.map(rule => [rule.from, rule]));
 
+    const rarityIndex  = new Map(rarities.map((r, i) => [r.key, i]));
+    const rarityByKey  = new Map(rarities.map(r => [r.key, r]));
+    const ruleByFrom   = new Map(rules.map(r => [r.from, r]));
+
+    // ---- state ----
     const state = {
-      inventory: {},
-      synthCount: {},
+      inventory:    {},
+      synthCount:   {},
       totalCommons: 0,
-      failCount: 0,
-      targetIndex: 0,
-      logs: []
+      failCount:    0,
+      targetIndex:  0,
+      logs:         []
     };
+    for (const r of rarities) state.inventory[r.key]   = 0;
+    for (const r of rules)    state.synthCount[r.from] = 0;
 
-    for (const rarity of rarities) state.inventory[rarity.key] = 0;
-    for (const rule of rules) state.synthCount[rule.from] = 0;
+    // ---- DOM refs ----
+    const stepBtn        = document.getElementById("stepBtn");
+    const cancelBtn      = document.getElementById("cancelBtn");
+    const resetBtn       = document.getElementById("resetBtn");
+    const progressWrap   = document.getElementById("progressWrap");
+    const progressTarget = document.getElementById("progressTarget");
+    const progressPct    = document.getElementById("progressPct");
+    const progressBar    = document.getElementById("progressBar");
+    const progressSynths = document.getElementById("progressSynths");
 
-    const stepBtn = document.getElementById("stepBtn");
-    const resetBtn = document.getElementById("resetBtn");
-
-    const modalOverlay = document.getElementById("modalOverlay");
-    const modalBox = document.getElementById("modalBox");
-    const modalIcon = document.getElementById("modalIcon");
-    const modalTitle = document.getElementById("modalTitle");
-    const modalBody = document.getElementById("modalBody");
+    const modalOverlay  = document.getElementById("modalOverlay");
+    const modalBox      = document.getElementById("modalBox");
+    const modalIcon     = document.getElementById("modalIcon");
+    const modalTitle    = document.getElementById("modalTitle");
+    const modalBody     = document.getElementById("modalBody");
     const modalCloseBtn = document.getElementById("modalCloseBtn");
-    const modalHint = document.getElementById("modalHint");
+    const modalHint     = document.getElementById("modalHint");
 
-    const MODAL_CLOSE_DELAY_MS = 700; // 連打での誤クリックを防ぐための猶予時間
+    const MODAL_CLOSE_DELAY_MS = 700;
     let modalTimer = null;
 
+    // ---- バッチ処理制御 ----
+    // 1 tick あたりの最大「合成1回」数。
+    // 再帰をなくしたので小さくしても安全。ブラウザに頻繁に制御を返す。
+    const BATCH_SIZE   = 200;
+    let   batchCancel  = false;
+    let   batchRunning = false;
+
+    function setBusy(running) {
+      batchRunning = running;
+      stepBtn.style.display   = running ? "none" : "";
+      cancelBtn.style.display = running ? ""     : "none";
+      resetBtn.disabled       = running;
+      progressWrap.classList.toggle("active", running);
+      if (!running) {
+        progressBar.style.width = "0%";
+      }
+    }
+
+    function updateProgress(label, current, total) {
+      const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+      progressTarget.textContent  = label;
+      progressPct.textContent     = `${pct}%`;
+      progressBar.style.width     = `${pct}%`;
+      progressSynths.textContent  =
+        `合成 ${format(totalSynths())} 回 / コモン消費 ${format(state.totalCommons)} 個`;
+    }
+
+    // ---- モーダル ----
     function openMilestoneModal(title, body, options = {}) {
       const { icon = "✨", cosmic = false } = options;
-
       modalTitle.textContent = title;
-      modalBody.textContent = body;
-      modalIcon.textContent = icon;
+      modalBody.textContent  = body;
+      modalIcon.textContent  = icon;
       modalBox.classList.toggle("cosmic", cosmic);
-
-      modalOverlay.hidden = false;
-      stepBtn.disabled = true;
-      resetBtn.disabled = true;
+      modalOverlay.hidden    = false;
       modalCloseBtn.disabled = true;
       modalHint.style.visibility = "visible";
-
       clearTimeout(modalTimer);
       modalTimer = setTimeout(() => {
-        modalCloseBtn.disabled = false;
-        modalHint.style.visibility = "hidden";
+        modalCloseBtn.disabled         = false;
+        modalHint.style.visibility     = "hidden";
       }, MODAL_CLOSE_DELAY_MS);
     }
 
     function closeMilestoneModal() {
       clearTimeout(modalTimer);
       modalOverlay.hidden = true;
-      stepBtn.disabled = false;
-      resetBtn.disabled = false;
     }
 
     modalCloseBtn.addEventListener("click", closeMilestoneModal);
-    document.addEventListener("keydown", event => {
-      if (event.key === "Escape" && !modalOverlay.hidden && !modalCloseBtn.disabled) {
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape" && !modalOverlay.hidden && !modalCloseBtn.disabled) {
         closeMilestoneModal();
       }
     });
 
-    function format(value) {
-      return Math.trunc(value).toLocaleString("ja-JP");
+    // ---- ユーティリティ ----
+    function format(v) {
+      return Math.trunc(v).toLocaleString("ja-JP");
     }
 
-    function rarityName(key) {
-      return rarityByKey.get(key).name;
+    function compactJapanese(v) {
+      const n    = Math.trunc(v);
+      const oku  = Math.floor(n / 100000000);
+      const man  = Math.floor((n % 100000000) / 10000);
+      const rest = n % 10000;
+      const parts = [];
+      if (oku)  parts.push(`${oku}億`);
+      if (man)  parts.push(`${man}万`);
+      if (rest || parts.length === 0) parts.push(`${rest}`);
+      return parts.join("");
     }
 
-    function rarityClass(key) {
-      return rarityByKey.get(key).cls;
+    function totalSynths() {
+      return Object.values(state.synthCount).reduce((s, c) => s + c, 0);
     }
 
-    function previousRarity(key) {
-      return rarities[rarityIndex.get(key) - 1].key;
-    }
+    function rarityName(key)  { return rarityByKey.get(key).name; }
+    function rarityClass(key) { return rarityByKey.get(key).cls;  }
+    function previousRarity(key) { return rarities[rarityIndex.get(key) - 1].key; }
 
     function rand() {
-      if (window.crypto && crypto.getRandomValues) {
-        const buffer = new Uint32Array(1);
-        crypto.getRandomValues(buffer);
-        return (buffer[0] + 0.5) / 4294967296;
+      if (window.crypto?.getRandomValues) {
+        const buf = new Uint32Array(1);
+        crypto.getRandomValues(buf);
+        return (buf[0] + 0.5) / 4294967296;
       }
       return Math.random();
     }
 
     function chooseOutcome(rule) {
       const roll = rand();
-      let total = 0;
-
+      let total  = 0;
       for (const outcome of rule.outcomes) {
         total += outcome.p;
         if (roll < total) return outcome;
       }
-
       return rule.outcomes[rule.outcomes.length - 1];
     }
 
+    // ---- コア合成ロジック（同期・1回ずつ） ----
     function addCommonsForOneCombine() {
       state.inventory.common += 9;
-      state.totalCommons += 9;
+      state.totalCommons     += 9;
     }
 
-    function synthesize(fromKey) {
-      const rule = ruleByFrom.get(fromKey);
-      if (!rule || state.inventory[fromKey] < 9) return null;
-
+    /**
+     * fromKey の在庫を1つ合成する。
+     * 戻り値: { from, to, failed } | null（在庫不足）
+     */
+    function synthesizeOne(fromKey) {
+      if (state.inventory[fromKey] < 9) return null;
+      const rule    = ruleByFrom.get(fromKey);
       const outcome = chooseOutcome(rule);
       state.inventory[fromKey] -= 9;
       state.inventory[outcome.to] += 1;
-      state.synthCount[fromKey] += 1;
+      state.synthCount[fromKey]   += 1;
       if (outcome.fail) state.failCount += 1;
-
-      return {
-        from: fromKey,
-        to: outcome.to,
-        failed: Boolean(outcome.fail)
-      };
+      return { from: fromKey, to: outcome.to, failed: Boolean(outcome.fail) };
     }
 
-    function reachedStopTarget(guard) {
-      return guard.stopKey && state.inventory[guard.stopKey] >= guard.stopAt;
-    }
+    /**
+     * 非再帰・フラットループで合成を1ステップ進める。
+     *
+     * 戦略: stopKey（目標）の直下レイヤーを優先し、
+     *   足りない素材があれば一段下に降りる。
+     *   スタックの代わりに「現在注目しているレイヤー」変数を使う。
+     *
+     * 戻り値: 実行した合成の結果 { from, to, failed } | null（停止条件に達した）
+     */
+    function stepOnce(stopKey, stopAt) {
+      if (stopKey && state.inventory[stopKey] >= stopAt) return null;
+      if (state.inventory.cosmic >= 1) return null;
 
-    function ensureNine(key, guard) {
-      while (state.inventory[key] < 9) {
-        if (reachedStopTarget(guard)) return true;
+      // stopKey の1個手前のレイヤーから始めて、素材が足りなければ下へ降りる
+      const stopIdx  = rarityIndex.get(stopKey);
+      // 合成の素材となるレイヤー（stopKey の1個下）
+      let   curIdx   = stopIdx - 1;
 
-        if (key === "common") {
-          addCommonsForOneCombine();
-          guard.count += 1;
-        } else {
-          produceOne(key, guard);
+      while (true) {
+        if (state.inventory.cosmic >= 1) return null;
+        if (stopKey && state.inventory[stopKey] >= stopAt) return null;
+
+        const curKey = rarities[curIdx].key;
+
+        if (state.inventory[curKey] >= 9) {
+          // このレイヤーを合成できる
+          return synthesizeOne(curKey);
         }
 
-        if (reachedStopTarget(guard)) return true;
-        if (guard.count >= guard.limit) return false;
+        // 素材が足りない → 一段下に降りる
+        if (curIdx === 0) {
+          // common → 補充
+          addCommonsForOneCombine();
+          // common が9個揃ったのでループ先頭に戻り合成
+          continue;
+        }
+
+        curIdx--;
+      }
+    }
+
+    // ---- バッチ処理: target を9個集める ----
+    function gatherTargetBatch(target, commonsBefore, synthsBefore, onDone) {
+      function tick() {
+        if (batchCancel) {
+          setBusy(false);
+          render();
+          addLog("warn", "キャンセル", "処理をキャンセルしました。");
+          render();
+          return;
+        }
+
+        // コズミック完成チェック（飛び級対応）
+        if (state.inventory.cosmic >= 1) { onDone("cosmic"); return; }
+        if (state.inventory[target] >= 9) { onDone("done"); return; }
+
+        // BATCH_SIZE 回だけ stepOnce を呼ぶ
+        for (let i = 0; i < BATCH_SIZE; i++) {
+          if (batchCancel) break;
+          if (state.inventory.cosmic >= 1) { onDone("cosmic"); return; }
+          if (state.inventory[target] >= 9) { onDone("done"); return; }
+
+          stepOnce(target, 9);
+        }
+
+        // 進捗表示してブラウザに制御を返す
+        updateProgress(
+          `${rarityName(target)}を集めています… (${format(state.inventory[target])} / 9)`,
+          state.inventory[target],
+          9
+        );
+        render();
+        setTimeout(tick, 0);
       }
 
-      return true;
+      setBusy(true);
+      batchCancel = false;
+      updateProgress(`${rarityName(target)}を集めています…`, 0, 9);
+      setTimeout(tick, 0);
     }
 
-    function produceOne(targetKey, guard) {
-      if (reachedStopTarget(guard)) return { stopped: true };
-
-      const fromKey = previousRarity(targetKey);
-      if (!ensureNine(fromKey, guard)) return null;
-      if (reachedStopTarget(guard)) return { stopped: true };
-
-      guard.count += 1;
-      return synthesize(fromKey);
+    // ---- ログ ----
+    function addLog(type, title, body) {
+      state.logs.unshift({ type, title, body });
+      state.logs = state.logs.slice(0, 70);
     }
 
+    // ---- ステップロジック ----
     function advanceStep() {
+      if (batchRunning) return;
+
+      // コズミック完成済み
       if (state.inventory.cosmic >= 1) {
         addLog("success", "完成済み", "コズミックが完成しました！リセットすると最初から遊べます。");
         render();
@@ -724,105 +876,99 @@
       const target = targets[state.targetIndex];
 
       if (state.inventory[target] < 9) {
-        gatherTarget(target);
+        // バッチで集める
+        const commonsBefore = state.totalCommons;
+        const synthsBefore  = totalSynths();
+        const invBefore     = state.inventory[target];
+
+        gatherTargetBatch(target, commonsBefore, synthsBefore, (result) => {
+          setBusy(false);
+          batchCancel = false;
+
+          if (result === "cosmic") {
+            // 飛び級でコズミック完成
+            const title = "コズミック完成！（飛び級）";
+            const body  = `処理途中でコズミックが完成しました！消費コモンは ${format(state.totalCommons)} 個です。`;
+            addLog("success", title, body);
+            render();
+            openMilestoneModal(title, body, { icon: "🌌", cosmic: true });
+            return;
+          }
+
+          // 通常: target が9個揃った
+          const milestoneTitle = `${rarityName(target)}が9個揃った！`;
+          const milestoneBody  =
+            `${rarityName(target)} ${format(invBefore)}個 → ${format(state.inventory[target])}個。` +
+            `消費コモン +${format(state.totalCommons - commonsBefore)} 個、` +
+            `合成 +${format(totalSynths() - synthsBefore)} 回。`;
+          addLog("success", milestoneTitle, milestoneBody);
+          render();
+          openMilestoneModal(milestoneTitle, milestoneBody);
+        });
+
       } else {
+        // 9個揃っているので合成する
         combineTarget(target);
+        render();
       }
-
-      render();
-    }
-
-    function gatherTarget(target) {
-      const before = state.inventory[target];
-      const commonsBefore = state.totalCommons;
-      const synthsBefore = totalSynths();
-      const guard = { count: 0, limit: 250000, stopKey: target, stopAt: 9 };
-
-      while (state.inventory[target] < 9) {
-        const result = produceOne(target, guard);
-        if (state.inventory.cosmic >= 1) break;
-
-        if (!result || guard.count >= guard.limit) {
-          addLog(
-            "warn",
-            "途中で一時停止",
-            `${rarityName(target)}を9個揃える途中です。今回のクリックでは内部処理 ${format(guard.count)} 回まで進めました。もう一度押すと続きます。`
-          );
-          return;
-        }
-      }
-
-      if (state.inventory.cosmic >= 1) {
-        const title = "コズミック完成！";
-        const body = `セレスティアル9個からコズミックが完成しました。消費コモンは ${format(state.totalCommons)} 個です。`;
-        addLog("success", title, body);
-        openMilestoneModal(title, body, { icon: "🌌", cosmic: true });
-        return;
-      }
-
-      const milestoneTitle = `${rarityName(target)}が9個揃った！`;
-      const milestoneBody = `${rarityName(target)} ${format(before)}個 → ${format(state.inventory[target])}個。消費コモン +${format(state.totalCommons - commonsBefore)} 個、合成 +${format(totalSynths() - synthsBefore)} 回。`;
-      addLog("success", milestoneTitle, milestoneBody);
-      openMilestoneModal(milestoneTitle, milestoneBody);
     }
 
     function combineTarget(target) {
-      const result = synthesize(target);
+      const result = synthesizeOne(target);
       if (!result) return;
 
-      if (result.failed) {
-        addLog(
-          "fail",
-          "合成失敗！",
-          `${rarityName(result.from)}9個 → ${rarityName(result.to)}1個。もう一回同じ目標をやり直し。`
-        );
-        return;
-      }
-
-      if (result.to === "cosmic" || state.inventory.cosmic >= 1) {
-        const title = "コズミック完成！";
-        const body = `${rarityName(result.from)}9個 → コズミック1個。消費コモンは ${format(state.totalCommons)} 個です。`;
+      // コズミック完成チェック（飛び級を含む）
+      if (state.inventory.cosmic >= 1) {
+        const title = result.to === "cosmic"
+          ? "コズミック完成！"
+          : "コズミック完成！（飛び級）";
+        const body  =
+          result.to === "cosmic"
+            ? `${rarityName(result.from)}9個 → コズミック1個。消費コモンは ${format(state.totalCommons)} 個です。`
+            : `${rarityName(result.from)}9個 → ${rarityName(result.to)}1個（飛び級）でコズミックが完成しました！消費コモンは ${format(state.totalCommons)} 個です。`;
         addLog("success", title, body);
+        render();
         openMilestoneModal(title, body, { icon: "🌌", cosmic: true });
         return;
       }
 
-      addLog(
-        "success",
-        "合成成功！",
-        `${rarityName(result.from)}9個 → ${rarityName(result.to)}1個。次の段階へ進みます。`
-      );
+      if (result.failed) {
+        addLog("fail", "合成失敗！",
+          `${rarityName(result.from)}9個 → ${rarityName(result.to)}1個。もう一回同じ目標をやり直し。`);
+        return;
+      }
+
+      addLog("success", "合成成功！",
+        `${rarityName(result.from)}9個 → ${rarityName(result.to)}1個。次の段階へ進みます。`);
       state.targetIndex = Math.min(state.targetIndex + 1, targets.length - 1);
     }
 
+    // ---- next action テキスト ----
     function nextActionText() {
       if (state.inventory.cosmic >= 1) return "コズミック完成。リセットで最初から";
-
       const target = targets[state.targetIndex];
-      if (state.inventory[target] < 9) {
-        return `${rarityName(target)}を9個揃える！`;
-      }
-
-      return `${rarityName(target)}9個を合成する！`;
+      return state.inventory[target] < 9
+        ? `${rarityName(target)}を9個揃える！`
+        : `${rarityName(target)}9個を合成する！`;
     }
 
-    function addLog(type, title, body) {
-      state.logs.unshift({ type, title, body });
-      state.logs = state.logs.slice(0, 70);
-    }
-
+    // ---- レンダリング ----
     function render() {
-      document.getElementById("totalCommons").textContent = `${format(state.totalCommons)} 個`;
-      document.getElementById("totalCommonsSub").textContent = `コモン合成 ${format(state.synthCount.common)} 回 / 約 ${compactJapanese(state.totalCommons)} 個`;
-      document.getElementById("nextAction").textContent = nextActionText();
+      document.getElementById("totalCommons").textContent    = `${format(state.totalCommons)} 個`;
+      document.getElementById("totalCommonsSub").textContent =
+        `コモン合成 ${format(state.synthCount.common)} 回 / 約 ${compactJapanese(state.totalCommons)} 個`;
+      document.getElementById("nextAction").textContent  = nextActionText();
       document.getElementById("totalSynths").textContent = `${format(totalSynths())} 回`;
-      document.getElementById("failCount").textContent = `${format(state.failCount)} 回`;
-      document.getElementById("stageName").textContent = state.inventory.cosmic >= 1 ? "完成" : rarityName(targets[state.targetIndex]);
+      document.getElementById("failCount").textContent   = `${format(state.failCount)} 回`;
+      document.getElementById("stageName").textContent   =
+        state.inventory.cosmic >= 1 ? "完成" : rarityName(targets[state.targetIndex]);
 
       const lastLog = state.logs[0];
       const message = document.getElementById("message");
-      message.className = `message ${lastLog ? lastLog.type : ""}`;
-      message.textContent = lastLog ? `${lastLog.title}: ${lastLog.body}` : "ボタンを押すと、目標在庫まで合成します。";
+      message.className   = `message ${lastLog ? lastLog.type : ""}`;
+      message.textContent = lastLog
+        ? `${lastLog.title}: ${lastLog.body}`
+        : "ボタンを押すと、目標在庫まで合成します。";
 
       renderInventory();
       renderCounts();
@@ -831,62 +977,54 @@
     }
 
     function renderInventory() {
-      const rows = rarities.map(rarity => `
+      const rows = rarities.map(r => `
         <tr>
-          <td class="${rarity.cls}">${rarity.name}</td>
-          <td>${format(state.inventory[rarity.key])} 個</td>
-        </tr>
-      `).join("");
-
+          <td class="${r.cls}">${r.name}</td>
+          <td>${format(state.inventory[r.key])} 個</td>
+        </tr>`).join("");
       document.getElementById("inventory").innerHTML = `
         <table class="inventory">
           <thead><tr><th>レアリティ</th><th>在庫</th></tr></thead>
           <tbody>${rows}</tbody>
-        </table>
-      `;
+        </table>`;
     }
 
     function renderCounts() {
-      const rows = rules.map(rule => `
+      const rows = rules.map(r => `
         <tr>
-          <td class="${rarityClass(rule.from)}">${rarityName(rule.from)}</td>
-          <td>${format(state.synthCount[rule.from])} 回</td>
-        </tr>
-      `).join("");
-
+          <td class="${rarityClass(r.from)}">${rarityName(r.from)}</td>
+          <td>${format(state.synthCount[r.from])} 回</td>
+        </tr>`).join("");
       document.getElementById("counts").innerHTML = `
         <table>
           <thead><tr><th>素材</th><th>合成回数</th></tr></thead>
           <tbody>${rows}</tbody>
-        </table>
-      `;
+        </table>`;
     }
 
     function renderLog() {
       const items = state.logs.length
-        ? state.logs.map(log => `<div class="log-item ${log.type}"><b>${log.title}</b><br>${log.body}</div>`).join("")
+        ? state.logs.map(l =>
+            `<div class="log-item ${l.type}"><b>${l.title}</b><br>${l.body}</div>`).join("")
         : `<div class="log-item"><b>ログ</b><br>まだ合成していません。</div>`;
-
       document.getElementById("log").innerHTML = items;
     }
 
     function renderProbRow(rule) {
-      const segments = rule.outcomes.map(outcome => {
-        const pct = (outcome.p * 100).toFixed(3).replace(/\.?0+$/, "");
-        const failClass = outcome.fail ? " fail" : "";
-        return `<span class="prob-seg${failClass}" style="width:${outcome.p * 100}%; background:${rarityByKey.get(outcome.to).color};" title="${rarityName(outcome.to)} ${pct}%"></span>`;
+      const segments = rule.outcomes.map(o => {
+        const pct      = (o.p * 100).toFixed(3).replace(/\.?0+$/, "");
+        const failCls  = o.fail ? " fail" : "";
+        return `<span class="prob-seg${failCls}" style="width:${o.p * 100}%; background:${rarityByKey.get(o.to).color};" title="${rarityName(o.to)} ${pct}%"></span>`;
       }).join("");
 
-      const legend = rule.outcomes.map(outcome => {
-        const pct = (outcome.p * 100).toFixed(3).replace(/\.?0+$/, "");
-        const dotClass = outcome.fail ? " fail" : "";
-        return `
-          <span>
-            <span class="dot${dotClass}" style="background:${rarityByKey.get(outcome.to).color};"></span>
-            <span class="${rarityClass(outcome.to)}">${rarityName(outcome.to)}</span>
-            <span class="pct">${pct}%</span>
-          </span>
-        `;
+      const legend = rule.outcomes.map(o => {
+        const pct     = (o.p * 100).toFixed(3).replace(/\.?0+$/, "");
+        const dotCls  = o.fail ? " fail" : "";
+        return `<span>
+          <span class="dot${dotCls}" style="background:${rarityByKey.get(o.to).color};"></span>
+          <span class="${rarityClass(o.to)}">${rarityName(o.to)}</span>
+          <span class="pct">${pct}%</span>
+        </span>`;
       }).join("");
 
       return `
@@ -897,13 +1035,12 @@
           </div>
           <div class="prob-bar">${segments}</div>
           <div class="prob-legend">${legend}</div>
-        </div>
-      `;
+        </div>`;
     }
 
     function renderRules() {
-      const rows = rules.map(renderProbRow).join("");
-      document.getElementById("rules").innerHTML = `<div class="prob-list">${rows}</div>`;
+      document.getElementById("rules").innerHTML =
+        `<div class="prob-list">${rules.map(renderProbRow).join("")}</div>`;
     }
 
     function currentSynthesisKey() {
@@ -916,34 +1053,41 @@
       document.getElementById("currentProb").innerHTML = rule ? renderProbRow(rule) : "";
     }
 
-    function compactJapanese(value) {
-      const num = Math.trunc(value);
-      const oku = Math.floor(num / 100000000);
-      const man = Math.floor((num % 100000000) / 10000);
-      const rest = num % 10000;
-      const parts = [];
-      if (oku) parts.push(`${oku}億`);
-      if (man) parts.push(`${man}万`);
-      if (rest || parts.length === 0) parts.push(`${rest}`);
-      return parts.join("");
-    }
+    // ---- イベント ----
+    stepBtn.addEventListener("click", advanceStep);
 
-    function totalSynths() {
-      return Object.values(state.synthCount).reduce((sum, count) => sum + count, 0);
-    }
+    cancelBtn.addEventListener("click", () => {
+      batchCancel = true;
+    });
 
-    function reset() {
-      for (const rarity of rarities) state.inventory[rarity.key] = 0;
-      for (const rule of rules) state.synthCount[rule.from] = 0;
+    resetBtn.addEventListener("click", () => {
+      if (batchRunning) {
+        batchCancel = true;
+        // tick() の次ループでキャンセル処理が走るのを待ってからリセット
+        const waitAndReset = () => {
+          if (batchRunning) { setTimeout(waitAndReset, 20); return; }
+          doReset();
+        };
+        waitAndReset();
+        return;
+      }
+      doReset();
+    });
+
+    function doReset() {
+      batchCancel  = false;
+      batchRunning = false;
+      setBusy(false);
+      for (const r of rarities) state.inventory[r.key]   = 0;
+      for (const r of rules)    state.synthCount[r.from] = 0;
       state.totalCommons = 0;
-      state.failCount = 0;
-      state.targetIndex = 0;
-      state.logs = [];
+      state.failCount    = 0;
+      state.targetIndex  = 0;
+      state.logs         = [];
       render();
     }
 
-    stepBtn.addEventListener("click", advanceStep);
-    resetBtn.addEventListener("click", reset);
+    // ---- 初期描画 ----
     renderRules();
     render();
   </script>
