@@ -141,6 +141,7 @@
       background: var(--panel-2);
       border: 1px solid var(--line);
       border-radius: 8px;
+      font-variant-numeric: tabular-nums;
     }
 
     .label {
@@ -150,7 +151,7 @@
 
     .value {
       color: var(--red);
-      font-size: clamp(32px, 6vw, 56px);
+      font-size: 32px;
       line-height: 1;
       font-weight: 800;
       overflow-wrap: anywhere;
@@ -163,11 +164,39 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #141b25;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
 
     .next strong {
       font-size: 20px;
       line-height: 1.35;
+    }
+
+    /* 成功エフェクト：緑グロー＋軽いスケール */
+    @keyframes next-success {
+      0%   { transform: scale(1);    border-color: var(--line);  box-shadow: none; }
+      15%  { transform: scale(1.03); border-color: var(--green); box-shadow: 0 0 0 3px rgba(84,216,141,0.35), 0 0 22px rgba(84,216,141,0.25); }
+      60%  { transform: scale(1.01); border-color: var(--green); box-shadow: 0 0 0 2px rgba(84,216,141,0.2),  0 0 14px rgba(84,216,141,0.15); }
+      100% { transform: scale(1);    border-color: var(--line);  box-shadow: none; }
+    }
+
+    /* 失敗エフェクト：赤グロー＋横シェイク */
+    @keyframes next-fail {
+      0%   { transform: translateX(0);    border-color: var(--line); box-shadow: none; }
+      10%  { transform: translateX(-7px); border-color: var(--red);  box-shadow: 0 0 0 3px rgba(239,90,115,0.4), 0 0 20px rgba(239,90,115,0.3); }
+      25%  { transform: translateX( 6px); border-color: var(--red);  box-shadow: 0 0 0 3px rgba(239,90,115,0.4), 0 0 20px rgba(239,90,115,0.3); }
+      40%  { transform: translateX(-4px); border-color: var(--red);  box-shadow: 0 0 0 2px rgba(239,90,115,0.25); }
+      55%  { transform: translateX( 3px); border-color: var(--red);  box-shadow: 0 0 0 2px rgba(239,90,115,0.25); }
+      70%  { transform: translateX(-2px); border-color: var(--red);  box-shadow: 0 0 0 1px rgba(239,90,115,0.15); }
+      100% { transform: translateX(0);    border-color: var(--line); box-shadow: none; }
+    }
+
+    .next.anim-success {
+      animation: next-success 0.9s cubic-bezier(.2,.8,.3,1) forwards;
+    }
+
+    .next.anim-fail {
+      animation: next-fail 0.7s ease-out forwards;
     }
 
     .message {
@@ -221,6 +250,7 @@
     .progress-synths {
       font-size: 12px;
       color: var(--muted);
+      font-variant-numeric: tabular-nums;
     }
 
     h2 {
@@ -240,6 +270,7 @@
       border-bottom: 1px solid var(--line);
       text-align: right;
       white-space: nowrap;
+      font-variant-numeric: tabular-nums;
     }
 
     th {
@@ -254,6 +285,9 @@
     .inventory td:nth-child(2) {
       font-size: 18px;
       font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      width: 1%;          /* 内容幅に収縮させつつ white-space:nowrap で広がらせる */
+      white-space: nowrap;
     }
 
     .cards {
@@ -279,6 +313,8 @@
       margin-top: 5px;
       font-size: 20px;
       overflow-wrap: anywhere;
+      font-variant-numeric: tabular-nums;
+      min-height: 1.3em; /* 数値が消えても高さが潰れない */
     }
 
     .log {
@@ -862,6 +898,24 @@
       state.logs = state.logs.slice(0, 70);
     }
 
+    // ---- 次の目標カードのエフェクト ----
+    const nextCard = document.querySelector(".next");
+    let nextAnimTimer = null;
+
+    function flashNext(type) {
+      if (!nextCard) return;
+      // 再生中でもリセットして即再発火できるようにクラスを一度除去
+      nextCard.classList.remove("anim-success", "anim-fail");
+      clearTimeout(nextAnimTimer);
+      // reflow を強制して animation が最初から再生される
+      void nextCard.offsetWidth;
+      const cls = type === "fail" ? "anim-fail" : "anim-success";
+      nextCard.classList.add(cls);
+      // アニメーション終了後にクラスを除去
+      const duration = type === "fail" ? 700 : 900;
+      nextAnimTimer = setTimeout(() => nextCard.classList.remove(cls), duration);
+    }
+
     // ---- ステップロジック ----
     function advanceStep() {
       if (batchRunning) return;
@@ -903,7 +957,7 @@
             `合成 +${format(totalSynths() - synthsBefore)} 回。`;
           addLog("success", milestoneTitle, milestoneBody);
           render();
-          openMilestoneModal(milestoneTitle, milestoneBody);
+          flashNext("success");
         });
 
       } else {
@@ -928,6 +982,7 @@
             : `${rarityName(result.from)}9個 → ${rarityName(result.to)}1個（飛び級）でコズミックが完成しました！消費コモンは ${format(state.totalCommons)} 個です。`;
         addLog("success", title, body);
         render();
+        flashNext("success");
         openMilestoneModal(title, body, { icon: "🌌", cosmic: true });
         return;
       }
@@ -935,12 +990,14 @@
       if (result.failed) {
         addLog("fail", "合成失敗！",
           `${rarityName(result.from)}9個 → ${rarityName(result.to)}1個。もう一回同じ目標をやり直し。`);
+        flashNext("fail");
         return;
       }
 
       addLog("success", "合成成功！",
         `${rarityName(result.from)}9個 → ${rarityName(result.to)}1個。次の段階へ進みます。`);
       state.targetIndex = Math.min(state.targetIndex + 1, targets.length - 1);
+      flashNext("success");
     }
 
     // ---- next action テキスト ----
